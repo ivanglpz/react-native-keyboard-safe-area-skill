@@ -18,7 +18,7 @@ npx skills add ivanglpz/react-native-keyboard-safe-area-skill --skill keyboard-s
 
 ## Skill
 
-- `keyboard-safe-area`: production rules and patterns for keyboard-safe React Native + Expo screens without hardcoded offsets or device hacks.
+- `keyboard-safe-area`: production rules for keyboard-safe React Native + Expo screens without hardcoded offsets or device hacks.
 
 ## skills.sh Badge
 

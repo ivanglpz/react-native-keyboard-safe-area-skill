@@ -1,6 +1,6 @@
 ---
 name: keyboard-safe-area
-description: Proven rules and patterns for using SafeAreaView, KeyboardAvoidingView, and ScrollView in React Native + Expo so the keyboard behaves correctly on iOS and Android without hardcoded offsets or device-specific hacks. Use this skill when a screen has inputs, fixed buttons, custom headers, steppers, or reports like "the button gets cut off", "the keyboard covers the input", "scroll does not work", or "it looks different on iOS and Android".
+description: Proven rules for using SafeAreaView, KeyboardAvoidingView, and ScrollView in React Native + Expo so the keyboard behaves correctly on iOS and Android without hardcoded offsets or device-specific hacks. Use this skill when a screen has inputs, fixed buttons, custom headers, steppers, or reports like "the button gets cut off", "the keyboard covers the input", "scroll does not work", or "it looks different on iOS and Android".
 license: MIT
 metadata:
   tags: react-native, expo, keyboard, safe-area, scrollview, ios, android
@@ -10,7 +10,7 @@ metadata:
 
 ## Overview
 
-This skill documents reliable patterns for handling the keyboard in React Native + Expo, including the subtle bugs that appear when combining `SafeAreaView`, `KeyboardAvoidingView`, `ScrollView`, navigation headers, animation wrappers, `Pressable`, and multi-step forms.
+This skill documents reliable rules for handling the keyboard in React Native + Expo, including the subtle bugs that appear when combining `SafeAreaView`, `KeyboardAvoidingView`, `ScrollView`, navigation headers, animation wrappers, `Pressable`, and multi-step forms.
 
 The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOffset`**. It is fixed by designing the right hierarchy and accepting that iOS and Android need different `behavior` values.
 
@@ -32,28 +32,28 @@ The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOff
 
 ---
 
-## Decision Tree
+## Layout Selection
 
 ```text
 Does the screen have inputs (TextInput)?
 ├── YES
 │   ├── Does it have a fixed bottom button?
-│   │   ├── YES -> Pattern A (KAV with ScrollView + View footer)
-│   │   └── NO -> Pattern B (KAV with ScrollView, button inside)
+│   │   ├── YES -> Use KAV with ScrollView and a sibling footer View
+│   │   └── NO -> Use KAV with ScrollView and keep the button inside the scroll content
 │   └── Does it have a large FlatList?
-│       └── YES -> Pattern C (KAV with direct FlatList)
+│       └── YES -> Use KAV with the FlatList as the direct scroll region
 └── NO
     ├── Does it only show content + a button?
-    │   └── Pattern D (no KAV, only SafeAreaView + ScrollView)
+    │   └── Use SafeAreaView + ScrollView without KAV
     └── Is it a Drawer/Stack screen with a header?
-        └── Pattern E (header inside SafeAreaView, do NOT use navigator header)
+        └── Render the header inside SafeAreaView; do NOT use the navigator header
 ```
 
 ---
 
-## Canonical Patterns
+## Reference Layouts
 
-### Pattern A — Form with Fixed Bottom Button
+### Form with Fixed Bottom Button
 
 ```tsx
 import { KeyboardAvoidingView, Platform, ScrollView, View, StyleSheet } from "react-native";
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
 - The footer `View` is NOT a `SafeAreaView edges={["bottom"]}`. The bottom inset is already applied by the parent `SafeAreaView`.
 - A fixed `paddingBottom` (about 8pt) guarantees minimum space between the button and the keyboard/edge without depending on safe-area insets.
 
-### Pattern B — Form with Button Inside the Scroll
+### Form with Button Inside the Scroll
 
 Use this when the content is short and the button naturally belongs at the end.
 
@@ -115,7 +115,7 @@ Use this when the content is short and the button naturally belongs at the end.
 </SafeAreaView>
 ```
 
-### Pattern C — FlatList with KAV
+### FlatList with KAV
 
 Use this for chats (input + message list) or long lists with a fixed button.
 
@@ -137,7 +137,7 @@ Use this for chats (input + message list) or long lists with a fixed button.
 </SafeAreaView>
 ```
 
-### Pattern D — No KAV (No Inputs)
+### No KAV When There Are No Inputs
 
 If the screen has no `TextInput`, **do not add `KeyboardAvoidingView`**. It is noise.
 
@@ -149,7 +149,7 @@ If the screen has no `TextInput`, **do not add `KeyboardAvoidingView`**. It is n
 </SafeAreaView>
 ```
 
-### Pattern E — Drawer/Stack Screen with Internal Custom Header
+### Drawer/Stack Screen with Internal Custom Header
 
 **Critical:** if the screen is inside a Drawer/Stack with a header, do NOT use the navigator header. Put the header INSIDE the `SafeAreaView`. This avoids the bug where `KeyboardAvoidingView` does not compensate for header height and the button gets covered.
 
@@ -179,7 +179,7 @@ export const Screen = () => (
 - No `keyboardVerticalOffset` or `useHeaderHeight()` is needed.
 - `edges={["left","right","bottom"]}` avoids duplicating the top inset because the custom header already handles `edges={["top"]}` internally.
 
-#### Reusable CustomHeader Example
+#### Reusable CustomHeader Reference
 
 ```tsx
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
 - When the keyboard opens, KAV calculates `screen height - keyboard height = available space`, but the REAL available space is `screen height - header height - keyboard height`. The header is missing from the calculation.
 - Result: KAV thinks it has more space than it really has, so it does not move content enough and the button gets covered.
 
-**Correct fix (preferred):** Pattern E — move the header INSIDE the screen's `SafeAreaView`.
+**Correct fix (preferred):** move the header INSIDE the screen's `SafeAreaView`.
 
 ```tsx
 // ❌ BAD — navigator header
@@ -316,7 +316,7 @@ Now the KAV measures its position starting right below the header because the he
 
 ---
 
-## Special Pattern — Stepper with Global Header (Back + Progress Bar)
+## Stepper with Global Header (Back + Progress Bar)
 
 Use this for multi-step flows such as onboarding or step-by-step resource creation.
 
