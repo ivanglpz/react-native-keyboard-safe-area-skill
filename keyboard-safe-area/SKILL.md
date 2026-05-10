@@ -416,8 +416,8 @@ return (
 // ❌ SafeAreaView from react-native (deprecated, does not respect dynamic safe insets)
 import { SafeAreaView } from "react-native";
 
-// ❌ passive Android behavior for a keyboard-aware screen
-behavior={Platform.OS === "ios" ? "padding" : undefined}
+// ❌ omitting platform-specific keyboard behavior on keyboard-aware screens
+<KeyboardAvoidingView style={{ flex: 1 }}>
 
 // ❌ hardcoded keyboardVerticalOffset
 keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
