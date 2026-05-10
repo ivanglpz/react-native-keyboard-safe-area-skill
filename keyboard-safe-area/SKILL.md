@@ -23,7 +23,7 @@ The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOff
 3. **Platform-specific `behavior`:** `Platform.OS === "ios" ? "padding" : "height"`. Use `"padding"` on iOS and `"height"` on Android for keyboard-aware screens.
 4. **Do not use the Expo Router Drawer/Stack/Tabs header when the screen has inputs.** The KAV cannot "see" that header, which causes incorrect calculations and clipped content. Use `headerShown: false` and place a custom header INSIDE the `SafeAreaView`.
 5. **Do not use `keyboardVerticalOffset` with fixed values.** If you must keep the navigator header, use React Navigation's `useHeaderHeight()`. The preferred solution is rule 4.
-6. **Configure Android:** `softwareKeyboardLayoutMode: "resize"` in `app.config.js`. This is the Expo default.
+6. **Configure Expo app settings intentionally:** keep Android `softwareKeyboardLayoutMode: "resize"`, enable Android `edgeToEdgeEnabled` when the app is designed for edge-to-edge layouts, and set `predictiveBackGestureEnabled` explicitly instead of relying on defaults.
 7. **`ScrollView`:** `style={{ flex: 1 }}` + `contentContainerStyle={{ flexGrow: 1 }}`. Do NOT use `flex: 1` inside `contentContainerStyle`. Always set `keyboardShouldPersistTaps="handled"`.
 8. **Do not wrap `ScrollView` with `Pressable onPress={Keyboard.dismiss}`** because it can block scrolling. If the product explicitly wants drag-to-dismiss behavior, add `keyboardDismissMode="on-drag"` to the `ScrollView`; otherwise omit it.
 9. **Do not nest `KeyboardAvoidingView`s.** Use one per screen, as high in the screen tree as possible.
@@ -396,17 +396,30 @@ return (
 | Bottom safe inset becomes 0 when the keyboard is open. | There is usually no bottom safe inset except the navigation bar. |
 | `useHeaderHeight()` reports the navigator header height. | Same, but prefer internal custom headers over hardcoded offsets. |
 
-### Required Android Config (app.config.js)
+### Expo App Config Reference
 
-```ts
+Use these settings as the baseline for Expo apps that need predictable keyboard, safe-area, and edge-to-edge behavior.
+
+```json
 {
-  expo: {
-    android: {
-      softwareKeyboardLayoutMode: "resize",  // default; make sure it was not changed to "pan"
-    },
-  },
+  "expo": {
+    "newArchEnabled": true,
+    "android": {
+      "softwareKeyboardLayoutMode": "resize",
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    }
+  }
 }
 ```
+
+Config rules:
+
+- Keep `softwareKeyboardLayoutMode: "resize"` for keyboard-aware screens. Do not switch it to `"pan"` to hide layout bugs.
+- Use `edgeToEdgeEnabled: true` when the app supports edge-to-edge Android layouts. Then treat safe-area insets as part of the screen design, not as an afterthought.
+- Set `predictiveBackGestureEnabled` explicitly so navigation behavior does not change silently across Android versions or Expo updates.
+- Keep `newArchEnabled` explicit in the app config when testing keyboard and layout behavior across devices.
+- If using `expo-router`, keep the plugin in `plugins` and prefer `headerShown: false` on input-heavy screens that render their own header inside the safe-area tree.
 
 ---
 
