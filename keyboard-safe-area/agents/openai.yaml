@@ -1,4 +1,4 @@
 interface:
   display_name: "React Native Keyboard Safe Area"
-  short_description: "React Native keyboard and safe-area rules"
+  short_description: "Keyboard-safe React Native screen rules"
   default_prompt: "Use $keyboard-safe-area to review or fix a React Native + Expo screen with keyboard, safe-area, ScrollView, header, or fixed button issues."

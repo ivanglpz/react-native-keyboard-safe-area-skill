@@ -1,6 +1,6 @@
 ---
 name: keyboard-safe-area
-description: Reglas y patrones probados para usar SafeAreaView, KeyboardAvoidingView y ScrollView en React Native + Expo, garantizando que el teclado funcione correctamente en iOS y Android sin offsets hardcodeados ni hacks por dispositivo. Aplica cuando una screen tiene inputs, botones fijos, headers personalizados, steppers o cuando reportan que "el botón se corta", "el teclado tapa el input", "no se puede hacer scroll" o "se ve diferente entre iOS y Android".
+description: Proven rules and patterns for using SafeAreaView, KeyboardAvoidingView, and ScrollView in React Native + Expo so the keyboard behaves correctly on iOS and Android without hardcoded offsets or device-specific hacks. Use this skill when a screen has inputs, fixed buttons, custom headers, steppers, or reports like "the button gets cut off", "the keyboard covers the input", "scroll does not work", or "it looks different on iOS and Android".
 license: MIT
 metadata:
   tags: react-native, expo, keyboard, safe-area, scrollview, ios, android
@@ -10,50 +10,50 @@ metadata:
 
 ## Overview
 
-Documenta los patrones correctos para manejar teclado en React Native + Expo, junto con los **bugs sutiles** que aparecen al combinar `SafeAreaView`, `KeyboardAvoidingView`, `ScrollView`, headers de navegación, animation wrappers, `Pressable` y formularios multi-step.
+This skill documents reliable patterns for handling the keyboard in React Native + Expo, including the subtle bugs that appear when combining `SafeAreaView`, `KeyboardAvoidingView`, `ScrollView`, navigation headers, animation wrappers, `Pressable`, and multi-step forms.
 
-La regla más importante: **el teclado no se "arregla" con `keyboardVerticalOffset`** — se arregla diseñando la jerarquía correcta y aceptando que iOS y Android necesitan `behavior` distintos.
+The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOffset`**. It is fixed by designing the right hierarchy and accepting that iOS and Android need different `behavior` values.
 
 ---
 
 ## Quick Rules (TL;DR)
 
-1. **Importar `SafeAreaView` desde `react-native-safe-area-context`** — nunca desde `react-native`.
-2. **Jerarquía base:** `SafeAreaView > KeyboardAvoidingView > ScrollView/FlatList > Content`. El KAV NO va dentro del ScrollView.
-3. **`behavior` por plataforma:** `Platform.OS === "ios" ? "padding" : undefined`. **NUNCA `"height"` en Android** — choca con `adjustResize` nativo.
-4. **NO uses el header del Drawer/Stack/Tabs de Expo Router cuando la screen tiene inputs.** El KAV no lo "ve" -> cálculos incorrectos -> contenido cortado. Usa `headerShown: false` y mete un header custom DENTRO del SafeAreaView.
-5. **NO uses `keyboardVerticalOffset` con valores fijos.** Si por alguna razón debes mantener el header del navigator, usa `useHeaderHeight()` de React Navigation. Pero la solución preferida es la regla 4.
-6. **Configura Android:** `softwareKeyboardLayoutMode: "resize"` en `app.config.js` — es el default en Expo.
-7. **`ScrollView`:** `style={{ flex: 1 }}` + `contentContainerStyle={{ flexGrow: 1 }}` (NO `flex: 1` adentro). `keyboardShouldPersistTaps="handled"` siempre.
-8. **No envuelvas el ScrollView en `Pressable onPress={Keyboard.dismiss}`** — bloquea el scroll. Usa `keyboardDismissMode="on-drag"` en el ScrollView.
-9. **No anides `KeyboardAvoidingView`s** — solo uno por screen, lo más arriba posible.
-10. **Edges del `SafeAreaView`:** si la screen tiene un header custom interno que ya maneja `edges={["top"]}`, usa `edges={["left","right","bottom"]}` en el padre para evitar duplicar el inset top.
-11. **`SafeAreaView` con `edges={["bottom"]}` + `paddingBottom` da espacio variable según teclado** — el bottom inset se vuelve 0 con teclado abierto. Para padding fijo siempre, usa un `View` simple.
+1. **Import `SafeAreaView` from `react-native-safe-area-context`** — never from `react-native`.
+2. **Base hierarchy:** `SafeAreaView > KeyboardAvoidingView > ScrollView/FlatList > Content`. The KAV does NOT go inside the `ScrollView`.
+3. **Platform-specific `behavior`:** `Platform.OS === "ios" ? "padding" : undefined`. **NEVER use `"height"` on Android** because it conflicts with native `adjustResize`.
+4. **Do not use the Expo Router Drawer/Stack/Tabs header when the screen has inputs.** The KAV cannot "see" that header, which causes incorrect calculations and clipped content. Use `headerShown: false` and place a custom header INSIDE the `SafeAreaView`.
+5. **Do not use `keyboardVerticalOffset` with fixed values.** If you must keep the navigator header, use React Navigation's `useHeaderHeight()`. The preferred solution is rule 4.
+6. **Configure Android:** `softwareKeyboardLayoutMode: "resize"` in `app.config.js`. This is the Expo default.
+7. **`ScrollView`:** `style={{ flex: 1 }}` + `contentContainerStyle={{ flexGrow: 1 }}`. Do NOT use `flex: 1` inside `contentContainerStyle`. Always set `keyboardShouldPersistTaps="handled"`.
+8. **Do not wrap `ScrollView` with `Pressable onPress={Keyboard.dismiss}`** because it blocks scrolling. Use `keyboardDismissMode="on-drag"` on the `ScrollView`.
+9. **Do not nest `KeyboardAvoidingView`s.** Use one per screen, as high in the screen tree as possible.
+10. **Safe-area `edges`:** if the screen has an internal custom header that already handles `edges={["top"]}`, use `edges={["left","right","bottom"]}` on the parent to avoid duplicating the top inset.
+11. **`SafeAreaView` with `edges={["bottom"]}` + `paddingBottom` creates variable spacing when the keyboard opens** because the bottom inset becomes 0. For fixed padding, use a plain `View`.
 
 ---
 
 ## Decision Tree
 
 ```text
-¿La screen tiene inputs (TextInput)?
-├── SÍ
-│   ├── ¿Tiene un botón fijo abajo?
-│   │   ├── SÍ -> Patrón A (KAV con ScrollView + View footer)
-│   │   └── NO -> Patrón B (KAV con ScrollView, botón dentro)
-│   └── ¿Tiene una FlatList grande?
-│       └── SÍ -> Patrón C (KAV con FlatList directa)
+Does the screen have inputs (TextInput)?
+├── YES
+│   ├── Does it have a fixed bottom button?
+│   │   ├── YES -> Pattern A (KAV with ScrollView + View footer)
+│   │   └── NO -> Pattern B (KAV with ScrollView, button inside)
+│   └── Does it have a large FlatList?
+│       └── YES -> Pattern C (KAV with direct FlatList)
 └── NO
-    ├── ¿Solo muestra contenido + botón?
-    │   └── Patrón D (sin KAV, solo SafeAreaView + ScrollView)
-    └── ¿Es un screen de Drawer/Stack con header?
-        └── Patrón E (header dentro de SafeAreaView, NO usar header del navigator)
+    ├── Does it only show content + a button?
+    │   └── Pattern D (no KAV, only SafeAreaView + ScrollView)
+    └── Is it a Drawer/Stack screen with a header?
+        └── Pattern E (header inside SafeAreaView, do NOT use navigator header)
 ```
 
 ---
 
-## Patrones canónicos
+## Canonical Patterns
 
-### Patrón A — Form con botón fijo abajo
+### Pattern A — Form with Fixed Bottom Button
 
 ```tsx
 import { KeyboardAvoidingView, Platform, ScrollView, View, StyleSheet } from "react-native";
@@ -76,7 +76,7 @@ export const FormScreen = () => (
       </ScrollView>
 
       <View style={styles.footer}>
-        {/* botón "Save" / "Next" */}
+        {/* "Save" / "Next" button */}
       </View>
     </KeyboardAvoidingView>
   </SafeAreaView>
@@ -92,14 +92,14 @@ const styles = StyleSheet.create({
 });
 ```
 
-**Notas críticas:**
-- `behavior={undefined}` en Android es lo correcto; deja que el sistema (`adjustResize`) maneje el teclado. NO uses `"height"` ahí.
-- El `View` del footer NO es un `SafeAreaView edges={["bottom"]}` — el bottom inset ya lo aplica el SafeAreaView padre.
-- Un `paddingBottom` fijo (aprox. 8pt) asegura espacio mínimo entre el botón y el teclado/borde sin depender de safe insets.
+**Critical notes:**
+- `behavior={undefined}` is correct on Android because it lets the system (`adjustResize`) handle the keyboard. Do NOT use `"height"` there.
+- The footer `View` is NOT a `SafeAreaView edges={["bottom"]}`. The bottom inset is already applied by the parent `SafeAreaView`.
+- A fixed `paddingBottom` (about 8pt) guarantees minimum space between the button and the keyboard/edge without depending on safe-area insets.
 
-### Patrón B — Form con botón dentro del scroll
+### Pattern B — Form with Button Inside the Scroll
 
-Cuando el contenido es corto y el botón naturalmente queda al final.
+Use this when the content is short and the button naturally belongs at the end.
 
 ```tsx
 <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
@@ -110,15 +110,15 @@ Cuando el contenido es corto y el botón naturalmente queda al final.
       keyboardShouldPersistTaps="handled"
     >
       {/* inputs */}
-      {/* botón inline al final */}
+      {/* inline button at the end */}
     </ScrollView>
   </KeyboardAvoidingView>
 </SafeAreaView>
 ```
 
-### Patrón C — FlatList con KAV
+### Pattern C — FlatList with KAV
 
-Para chats (input + lista de mensajes) o listas largas con un botón fijo.
+Use this for chats (input + message list) or long lists with a fixed button.
 
 ```tsx
 <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
@@ -133,31 +133,31 @@ Para chats (input + lista de mensajes) o listas largas con un botón fijo.
       keyboardDismissMode="on-drag"
     />
     <View style={styles.footer}>
-      {/* botón fijo o input chat */}
+      {/* fixed button or chat input */}
     </View>
   </KeyboardAvoidingView>
 </SafeAreaView>
 ```
 
-### Patrón D — Sin KAV (no inputs)
+### Pattern D — No KAV (No Inputs)
 
-Si la screen no tiene `TextInput`, **no agregues `KeyboardAvoidingView`** — es ruido.
+If the screen has no `TextInput`, **do not add `KeyboardAvoidingView`**. It is noise.
 
 ```tsx
 <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
   <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
-    {/* contenido */}
+    {/* content */}
   </ScrollView>
 </SafeAreaView>
 ```
 
-### Patrón E — Drawer/Stack screen con header custom interno
+### Pattern E — Drawer/Stack Screen with Internal Custom Header
 
-**Crítico:** si la screen está dentro de un Drawer/Stack con header, NO uses el header del navigator. Mete el header DENTRO del SafeAreaView. Esto evita el bug donde `KeyboardAvoidingView` no compensa el header height y el botón queda tapado.
+**Critical:** if the screen is inside a Drawer/Stack with a header, do NOT use the navigator header. Put the header INSIDE the `SafeAreaView`. This avoids the bug where `KeyboardAvoidingView` does not compensate for header height and the button gets covered.
 
 ```tsx
-// CustomHeader es un componente que maneja edges={["top"]} internamente
-// (back button, título, etc.)
+// CustomHeader is a component that handles edges={["top"]} internally
+// (back button, title, etc.)
 
 export const Screen = () => (
   <>
@@ -167,21 +167,21 @@ export const Screen = () => (
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
-          {/* contenido */}
+          {/* content */}
         </ScrollView>
-        <View style={styles.footer}>{/* botón */}</View>
+        <View style={styles.footer}>{/* button */}</View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   </>
 );
 ```
 
-**Por qué funciona:**
-- El header vive dentro del SafeAreaView, así que el KAV mide su posición empezando justo debajo del header.
-- No se necesita `keyboardVerticalOffset` ni `useHeaderHeight()`.
-- `edges={["left","right","bottom"]}` evita duplicar el inset top (el header custom ya tiene `edges={["top"]}` internamente).
+**Why this works:**
+- The header lives inside the `SafeAreaView`, so the KAV measures its position starting right below the header.
+- No `keyboardVerticalOffset` or `useHeaderHeight()` is needed.
+- `edges={["left","right","bottom"]}` avoids duplicating the top inset because the custom header already handles `edges={["top"]}` internally.
 
-#### Ejemplo de un CustomHeader reutilizable
+#### Reusable CustomHeader Example
 
 ```tsx
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -194,7 +194,7 @@ export const CustomHeader = ({ title }: { title: string }) => {
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <View style={styles.row}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          {/* icon back */}
+          {/* back icon */}
         </Pressable>
         <Text style={styles.title}>{title}</Text>
       </View>
@@ -212,114 +212,114 @@ const styles = StyleSheet.create({
 
 ---
 
-## Common Bugs y troubleshooting
+## Common Bugs and Troubleshooting
 
-### Bug 1: "El botón se corta cuando abro el teclado" (header de Expo Router)
+### Bug 1: "The button gets cut off when I open the keyboard" (Expo Router Header)
 
-**El bug más común y el más difícil de diagnosticar.** Si estás usando el header que ofrece Expo Router (Drawer header, Stack header, Tabs header) en una screen con inputs, casi siempre vas a tener problemas con el teclado.
+**This is the most common bug and the hardest one to diagnose.** If you are using the header provided by Expo Router (Drawer header, Stack header, Tabs header) on a screen with inputs, you will almost always have keyboard issues.
 
-**Síntomas:**
-- El botón fijo abajo queda cortado o tapado al abrir el teclado.
-- El padding entre el botón y el teclado desaparece.
-- El contenido se ve "comprimido" o "saltado" cuando el teclado abre.
-- Funciona perfecto en una screen sin header, falla cuando hay header.
-- El bug es peor en Android.
+**Symptoms:**
+- The fixed bottom button gets clipped or covered when the keyboard opens.
+- The spacing between the button and keyboard disappears.
+- The content looks compressed or jumps when the keyboard opens.
+- It works perfectly on a screen without a header, then fails when a header is present.
+- The bug is worse on Android.
 
-**Por qué pasa:**
-- El header del Drawer/Stack/Tabs se renderiza FUERA del árbol de tu screen — es parte del navigator, no de tu componente.
-- Tu `KeyboardAvoidingView` mide su posición desde el top absoluto de la window, sin saber que el header le quita 50-110pt arriba.
-- Cuando el teclado abre, el KAV calcula `screen height - keyboard height = espacio disponible`, pero el espacio REAL disponible es `screen height - header height - keyboard height`. Falta restar el header.
-- Resultado: el KAV cree que tiene más espacio del que realmente tiene -> no sube el contenido lo suficiente -> el botón queda tapado.
+**Why it happens:**
+- The Drawer/Stack/Tabs header renders OUTSIDE your screen tree. It belongs to the navigator, not your component.
+- Your `KeyboardAvoidingView` measures its position from the absolute top of the window, without knowing that the header consumes 50-110pt above it.
+- When the keyboard opens, KAV calculates `screen height - keyboard height = available space`, but the REAL available space is `screen height - header height - keyboard height`. The header is missing from the calculation.
+- Result: KAV thinks it has more space than it really has, so it does not move content enough and the button gets covered.
 
-**Fix correcto (preferido):** Patrón E — mover el header DENTRO del SafeAreaView de tu screen.
+**Correct fix (preferred):** Pattern E — move the header INSIDE the screen's `SafeAreaView`.
 
 ```tsx
-// ❌ MAL — header del navigator
+// ❌ BAD — navigator header
 <Drawer.Screen options={{ headerShown: true, title: "Edit" }} />
 <SafeAreaView>
   <KeyboardAvoidingView>
     <ScrollView>...</ScrollView>
-    <View style={styles.footer}><Button /></View>  {/* se corta con keyboard */}
+    <View style={styles.footer}><Button /></View>  {/* gets cut off with keyboard */}
   </KeyboardAvoidingView>
 </SafeAreaView>
 
-// ✅ BIEN — header inside
+// ✅ GOOD — header inside
 <Drawer.Screen options={{ headerShown: false }} />
 <SafeAreaView edges={["left", "right", "bottom"]}>
-  <CustomHeader title="Edit" />  {/* dentro del SafeAreaView */}
+  <CustomHeader title="Edit" />  {/* inside SafeAreaView */}
   <KeyboardAvoidingView>
     <ScrollView>...</ScrollView>
-    <View style={styles.footer}><Button /></View>  {/* funciona perfecto */}
+    <View style={styles.footer}><Button /></View>  {/* works correctly */}
   </KeyboardAvoidingView>
 </SafeAreaView>
 ```
 
-Ahora el KAV mide su posición empezando justo debajo del header (porque el header es parte del mismo árbol), y el cálculo es correcto sin necesidad de offset.
+Now the KAV measures its position starting right below the header because the header is part of the same tree, and the calculation is correct without an offset.
 
-**Fix alternativo (peor, pero válido):** `keyboardVerticalOffset={useHeaderHeight()}` de `@react-navigation/elements`. Es dinámico (no hardcoded) y compensa el header. Pero suma complejidad y NO ayuda en Android porque allí el conflicto es con `adjustResize`, no con el offset.
+**Alternative fix (worse, but valid):** `keyboardVerticalOffset={useHeaderHeight()}` from `@react-navigation/elements`. It is dynamic, not hardcoded, and compensates for the header. But it adds complexity and does NOT help much on Android because the conflict there is with `adjustResize`, not with the offset.
 
-**NUNCA hagas:** `keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}`. Es un valor mágico que falla en otros dispositivos (notch grande/chico, large title, header con subtítulo, status bar grande).
+**NEVER do this:** `keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}`. It is a magic number that fails on other devices (large/small notch, large title, header with subtitle, tall status bar).
 
-### Bug 2: "El padding del footer se 'come' cuando abro el teclado"
+### Bug 2: "Footer padding disappears when I open the keyboard"
 
-**Diagnóstico:**
-- Tienes `<SafeAreaView edges={["bottom"]} style={styles.footer}>` envolviendo el botón.
-- Sin teclado: el bottom safe inset (aprox. 34pt en iPhones modernos) + `paddingBottom` da mucho espacio.
-- Con teclado: el bottom safe inset se vuelve 0 (iOS lo reporta así porque el teclado ocupa esa zona).
-- Resultado: el espacio visible debajo del botón se reduce drásticamente.
+**Diagnosis:**
+- You have `<SafeAreaView edges={["bottom"]} style={styles.footer}>` wrapping the button.
+- Without the keyboard: bottom safe inset (about 34pt on modern iPhones) + `paddingBottom` creates generous spacing.
+- With the keyboard: bottom safe inset becomes 0 because iOS reports that the keyboard occupies that area.
+- Result: the visible space below the button shrinks dramatically.
 
-**Fix:** mover el `bottom` al `SafeAreaView` padre (`edges={["left","right","bottom"]}`) y usar un `<View>` simple para el footer con un `paddingBottom` fijo. Así el padding es constante.
+**Fix:** move the `bottom` edge to the parent `SafeAreaView` (`edges={["left","right","bottom"]}`) and use a plain `<View>` for the footer with fixed `paddingBottom`. This keeps padding constant.
 
-### Bug 3: "En iOS funciona pero en Android el botón se rompe"
+### Bug 3: "It works on iOS but breaks the button on Android"
 
-**Diagnóstico:** estás usando `behavior="height"` en Android.
+**Diagnosis:** you are using `behavior="height"` on Android.
 
-**Por qué pasa:**
-- Android tiene `softwareKeyboardLayoutMode: "resize"` (default Expo) — el sistema YA redimensiona la window al abrir el teclado.
-- `behavior="height"` hace que el KAV TAMBIÉN reduzca su altura. Doble cálculo -> contenido comprimido.
+**Why it happens:**
+- Android has `softwareKeyboardLayoutMode: "resize"` (Expo default), so the system ALREADY resizes the window when the keyboard opens.
+- `behavior="height"` makes KAV ALSO reduce its height. Double calculation -> compressed content.
 
-**Fix:** `behavior={Platform.OS === "ios" ? "padding" : undefined}`. Con `undefined`, el KAV se vuelve un `<View>` pasivo en Android y deja que el sistema maneje todo.
+**Fix:** `behavior={Platform.OS === "ios" ? "padding" : undefined}`. With `undefined`, KAV becomes a passive `<View>` on Android and lets the system handle everything.
 
-### Bug 4: "No puedo hacer scroll dentro del form"
+### Bug 4: "I cannot scroll inside the form"
 
-**Diagnóstico:** envolviste el ScrollView en `<Pressable onPress={Keyboard.dismiss}>` o `<TouchableWithoutFeedback>`.
+**Diagnosis:** you wrapped the `ScrollView` in `<Pressable onPress={Keyboard.dismiss}>` or `<TouchableWithoutFeedback>`.
 
-**Por qué pasa:** estos componentes registran un gesture handler que captura los toques verticales antes de que lleguen al ScrollView.
+**Why it happens:** these components register a gesture handler that captures vertical touches before they reach the `ScrollView`.
 
 **Fix:**
-1. Quitar el `Pressable`/`TouchableWithoutFeedback`.
-2. Agregar `keyboardDismissMode="on-drag"` al ScrollView. Cuando el usuario hace swipe vertical, el teclado se cierra solo.
+1. Remove the `Pressable`/`TouchableWithoutFeedback`.
+2. Add `keyboardDismissMode="on-drag"` to the `ScrollView`. When the user swipes vertically, the keyboard dismisses automatically.
 
-### Bug 5: "Doble safe area top — hay un gap arriba"
+### Bug 5: "Double top safe area — there is a gap at the top"
 
-**Diagnóstico:** tienes `<SafeAreaView>` (default edges = top/right/bottom/left) envolviendo otro componente que ya aplica `edges={["top"]}` internamente.
+**Diagnosis:** you have `<SafeAreaView>` (default edges = top/right/bottom/left) wrapping another component that already applies `edges={["top"]}` internally.
 
-**Fix:** especificar edges en el padre sin `"top"`:
+**Fix:** specify parent edges without `"top"`:
 ```tsx
 <SafeAreaView edges={["left", "right", "bottom"]}>
-  <CustomHeader />  {/* ya maneja top */}
+  <CustomHeader />  {/* already handles top */}
 </SafeAreaView>
 ```
 
-### Bug 6: "El KAV no funciona porque está anidado"
+### Bug 6: "KAV does not work because it is nested"
 
-**Diagnóstico:** tienes un KAV global en el padre y otro KAV en cada step/sub-componente.
+**Diagnosis:** you have a global KAV in the parent and another KAV in each step/subcomponent.
 
-**Por qué pasa:** los KAVs internos miden desde su propia posición (que ya está afectada por el KAV padre). Cálculos incorrectos.
+**Why it happens:** inner KAVs measure from their own position, which is already affected by the parent KAV. This produces incorrect calculations.
 
-**Fix:** UN SOLO KAV por screen, lo más arriba posible. Si la screen es un stepper, el KAV va en el padre, no en cada step.
+**Fix:** use ONE KAV per screen, as high as possible. If the screen is a stepper, the KAV belongs in the parent, not in each step.
 
-### Bug 7: "Animation wrappers (Reanimated, FadeIn) rompen el ScrollView"
+### Bug 7: "Animation wrappers (Reanimated, FadeIn) break the ScrollView"
 
-**Diagnóstico:** el ScrollView está dentro de `<Animated.View>` o un wrapper de animación que aplica transforms.
+**Diagnosis:** the `ScrollView` is inside an `<Animated.View>` or animation wrapper that applies transforms.
 
-**Fix:** usar el animation wrapper en HIJOS del ScrollView, no como wrapper. O usar Reanimated v3+ con `Animated.ScrollView` directamente.
+**Fix:** use animation wrappers on CHILDREN of the `ScrollView`, not around the `ScrollView`. Or use Reanimated v3+ with `Animated.ScrollView` directly.
 
 ---
 
-## Patrón especial — Stepper con header global (back + progress bar)
+## Special Pattern — Stepper with Global Header (Back + Progress Bar)
 
-Para flujos multi-step (onboarding, creación de recurso paso-a-paso).
+Use this for multi-step flows such as onboarding or step-by-step resource creation.
 
 ```tsx
 const TOTAL_STEPS = 5;
@@ -338,12 +338,12 @@ return (
   <SafeAreaView style={styles.screen} edges={["top", "left", "right", "bottom"]}>
     <Drawer.Screen options={{ headerShown: false }} />
 
-    {/* Header con back + progress bar */}
+    {/* Header with back button + progress bar */}
     {step < TOTAL_STEPS && (
       <View style={styles.headerRow}>
         <View style={styles.headerSide}>
           <TouchableOpacity onPress={step > 0 ? goBack : goOut} style={styles.backButton}>
-            {/* icon back */}
+            {/* back icon */}
           </TouchableOpacity>
         </View>
         <View style={styles.headerCenter}>
@@ -359,9 +359,9 @@ return (
       </View>
     )}
 
-    {/* KAV global, NUNCA en cada step */}
+    {/* Global KAV, NEVER one per step */}
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      {/* ScrollView global, NO uno por step */}
+      {/* Global ScrollView, NOT one per step */}
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
@@ -370,41 +370,41 @@ return (
       >
         {step === 0 && <Step1 />}
         {step === 1 && <Step2 />}
-        {/* etc — cada Step solo retorna un <View>, sin su propio ScrollView ni KAV */}
+        {/* etc — each Step only returns a <View>, with no local ScrollView or KAV */}
       </ScrollView>
 
       <View style={styles.footer}>
-        {/* botón "Next" */}
+        {/* "Next" button */}
       </View>
     </KeyboardAvoidingView>
   </SafeAreaView>
 );
 ```
 
-**Reglas del stepper:**
-1. UN solo KAV en el padre. Los steps son `<View>` plain.
-2. UN solo ScrollView en el padre. Los steps no tienen su propio scroll.
-3. Render condicional `{step === N && <StepX />}` para mostrar el step activo.
-4. NO uses `<Pressable onPress={Keyboard.dismiss}>` envolviendo los steps. Usa `keyboardDismissMode="on-drag"` en el ScrollView.
+**Stepper rules:**
+1. ONE KAV in the parent. Steps are plain `<View>` components.
+2. ONE `ScrollView` in the parent. Steps do not have their own scroll container.
+3. Use conditional rendering (`{step === N && <StepX />}`) to show the active step.
+4. Do NOT wrap steps with `<Pressable onPress={Keyboard.dismiss}>`. Use `keyboardDismissMode="on-drag"` on the `ScrollView`.
 
 ---
 
-## Platform behavior reference
+## Platform Behavior Reference
 
-| Comportamiento iOS | Comportamiento Android |
-|--------------------|------------------------|
-| Sistema NO maneja el teclado nativamente. | `adjustResize` redimensiona la window al abrir el teclado. |
-| KAV con `behavior="padding"` agrega padding-bottom = altura del teclado. | KAV con `behavior=undefined` no hace nada; deja al sistema. |
-| `bottom` safe inset se vuelve 0 con teclado abierto. | No hay safe inset bottom (excepto navigation bar). |
-| `useHeaderHeight()` reporta el alto del header del navigator. | Igual, pero menos crítico porque `adjustResize` lo compensa. |
+| iOS behavior | Android behavior |
+|--------------|------------------|
+| The system does NOT handle the keyboard natively. | `adjustResize` resizes the window when the keyboard opens. |
+| KAV with `behavior="padding"` adds bottom padding equal to keyboard height. | KAV with `behavior=undefined` does nothing and lets the system work. |
+| Bottom safe inset becomes 0 when the keyboard is open. | There is usually no bottom safe inset except the navigation bar. |
+| `useHeaderHeight()` reports the navigator header height. | Same, but less critical because `adjustResize` compensates more. |
 
-### Configuración Android necesaria (app.config.js)
+### Required Android Config (app.config.js)
 
 ```ts
 {
   expo: {
     android: {
-      softwareKeyboardLayoutMode: "resize",  // default, asegúrate de no cambiarlo a "pan"
+      softwareKeyboardLayoutMode: "resize",  // default; make sure it was not changed to "pan"
     },
   },
 }
@@ -412,74 +412,74 @@ return (
 
 ---
 
-## Anti-patterns (NO hacer)
+## Anti-Patterns (Do Not Do This)
 
 ```tsx
-// ❌ SafeAreaView de react-native (deprecado, no respeta safe insets dinámicos)
+// ❌ SafeAreaView from react-native (deprecated, does not respect dynamic safe insets)
 import { SafeAreaView } from "react-native";
 
-// ❌ behavior="height" en Android (conflicto con adjustResize)
+// ❌ behavior="height" on Android (conflicts with adjustResize)
 behavior={Platform.OS === "ios" ? "padding" : "height"}
 
-// ❌ keyboardVerticalOffset hardcoded
+// ❌ hardcoded keyboardVerticalOffset
 keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
 
-// ❌ ScrollView envolviendo KAV
+// ❌ ScrollView wrapping KAV
 <ScrollView>
   <KeyboardAvoidingView>...</KeyboardAvoidingView>
 </ScrollView>
 
-// ❌ KAV anidados (uno en parent, otro en child)
+// ❌ Nested KAVs (one in parent, another in child)
 <KeyboardAvoidingView>
   <SomeChildScreen>
     <KeyboardAvoidingView>...</KeyboardAvoidingView>
   </SomeChildScreen>
 </KeyboardAvoidingView>
 
-// ❌ Pressable con onPress envolviendo el ScrollView (rompe scroll)
+// ❌ Pressable with onPress around ScrollView (breaks scroll)
 <Pressable onPress={Keyboard.dismiss}>
   <ScrollView>...</ScrollView>
 </Pressable>
 
-// ❌ contentContainerStyle con flex: 1 (no permite scroll)
+// ❌ contentContainerStyle with flex: 1 (prevents scrolling)
 <ScrollView contentContainerStyle={{ flex: 1 }}>
 
-// ❌ height: '100%' dentro de contenido scrollable
+// ❌ height: '100%' inside scrollable content
 <View style={{ height: '100%' }}>
 
-// ❌ SafeAreaView edges duplicados con un header interno que ya maneja top
+// ❌ Duplicated SafeAreaView edges with an internal header that already handles top
 <SafeAreaView>  {/* default = top/right/bottom/left */}
-  <CustomHeader />  {/* ya tiene edges=["top"] internamente */}
+  <CustomHeader />  {/* already has edges=["top"] internally */}
 </SafeAreaView>
 
-// ❌ Drawer.Screen / Stack.Screen con headerShown: true cuando hay inputs en la screen
-// (causa que el botón se corte con el teclado)
+// ❌ Drawer.Screen / Stack.Screen with headerShown: true when the screen has inputs
+// (causes the button to get cut off by the keyboard)
 <Drawer.Screen options={{ headerShown: true, title: "..." }} />
 ```
 
 ---
 
-## Checklist al crear/refactorizar una screen con teclado
+## Checklist for Creating or Refactoring a Keyboard Screen
 
-- [ ] `SafeAreaView` viene de `react-native-safe-area-context`.
-- [ ] Jerarquía: `SafeAreaView > KAV > ScrollView/FlatList > content`.
-- [ ] `behavior={Platform.OS === "ios" ? "padding" : undefined}` (NUNCA `"height"`).
-- [ ] No hay `keyboardVerticalOffset` con valor numérico fijo.
-- [ ] Si hay header: usa un header custom DENTRO del SafeAreaView, con `headerShown: false` en el navigator.
-- [ ] `ScrollView` con `style={{flex:1}}` + `contentContainerStyle={{flexGrow:1}}` + `keyboardShouldPersistTaps="handled"`.
-- [ ] Si quieres dismiss del teclado al hacer scroll: `keyboardDismissMode="on-drag"`.
-- [ ] No hay `Pressable`/`TouchableWithoutFeedback` envolviendo el ScrollView.
-- [ ] Solo UN `KeyboardAvoidingView` por screen, lo más arriba posible.
-- [ ] Si la screen es un stepper: scroll y KAV viven en el parent, no en cada step.
-- [ ] Edges del SafeAreaView ajustados al contexto (`["left","right","bottom"]` cuando el header interno maneja `top`).
-- [ ] Footer con botón fijo: `<View>` plain con `paddingHorizontal`, `paddingTop`, `paddingBottom` fijos. No SafeAreaView interno.
-- [ ] Probado en iPhone con home indicator (espacio bottom respetado) y Android (botón no tapado por teclado).
+- [ ] `SafeAreaView` comes from `react-native-safe-area-context`.
+- [ ] Hierarchy: `SafeAreaView > KAV > ScrollView/FlatList > content`.
+- [ ] `behavior={Platform.OS === "ios" ? "padding" : undefined}`. NEVER `"height"`.
+- [ ] There is no `keyboardVerticalOffset` with a fixed numeric value.
+- [ ] If there is a header: use a custom header INSIDE the `SafeAreaView`, with `headerShown: false` on the navigator.
+- [ ] `ScrollView` has `style={{flex:1}}` + `contentContainerStyle={{flexGrow:1}}` + `keyboardShouldPersistTaps="handled"`.
+- [ ] If keyboard dismissal on scroll is desired: `keyboardDismissMode="on-drag"`.
+- [ ] No `Pressable`/`TouchableWithoutFeedback` wraps the `ScrollView`.
+- [ ] There is only ONE `KeyboardAvoidingView` per screen, as high as possible.
+- [ ] If the screen is a stepper: scroll and KAV live in the parent, not inside each step.
+- [ ] SafeAreaView edges match the context (`["left","right","bottom"]` when an internal header handles `top`).
+- [ ] Fixed-button footer: plain `<View>` with fixed `paddingHorizontal`, `paddingTop`, and `paddingBottom`. No internal `SafeAreaView`.
+- [ ] Tested on an iPhone with a home indicator and on Android. The bottom button is not covered by the keyboard.
 
 ---
 
-## Quick Reference: footer style
+## Quick Reference: Footer Style
 
-Patrón estándar para un botón fijo abajo:
+Standard pattern for a fixed bottom button:
 
 ```ts
 footer: {
@@ -489,4 +489,4 @@ footer: {
 }
 ```
 
-Si el `SafeAreaView` padre tiene `edges={["bottom"]}`, el padding bottom se suma al inset (más espacio sin teclado, menos con teclado). Si el padre NO tiene `bottom` en sus edges, el `paddingBottom` es constante (recomendado para evitar el bug 2).
+If the parent `SafeAreaView` has `edges={["bottom"]}`, bottom padding is added to the inset (more space without keyboard, less with keyboard). If the parent does NOT include `bottom` in its edges, `paddingBottom` is constant, which is recommended to avoid Bug 2.
