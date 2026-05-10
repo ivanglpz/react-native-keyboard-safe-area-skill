@@ -20,7 +20,7 @@ The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOff
 
 1. **Import `SafeAreaView` from `react-native-safe-area-context`** — never from `react-native`.
 2. **Base hierarchy:** `SafeAreaView > KeyboardAvoidingView > ScrollView/FlatList > Content`. The KAV does NOT go inside the `ScrollView`.
-3. **Platform-specific default `behavior`:** `Platform.OS === "ios" ? "padding" : undefined`. Do not use `"height"` as the default Android behavior because it can conflict with native `adjustResize`. The only documented exception is the Pattern C fallback for `FlatList` screens with a fixed footer/input after testing proves Android `undefined` is not enough.
+3. **Platform-specific `behavior`:** `Platform.OS === "ios" ? "padding" : "height"`. Use `"padding"` on iOS and `"height"` on Android for keyboard-aware screens.
 4. **Do not use the Expo Router Drawer/Stack/Tabs header when the screen has inputs.** The KAV cannot "see" that header, which causes incorrect calculations and clipped content. Use `headerShown: false` and place a custom header INSIDE the `SafeAreaView`.
 5. **Do not use `keyboardVerticalOffset` with fixed values.** If you must keep the navigator header, use React Navigation's `useHeaderHeight()`. The preferred solution is rule 4.
 6. **Configure Android:** `softwareKeyboardLayoutMode: "resize"` in `app.config.js`. This is the Expo default.
@@ -63,7 +63,7 @@ export const FormScreen = () => (
   <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
         style={{ flex: 1 }}
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
 ```
 
 **Critical notes:**
-- `behavior={undefined}` is correct on Android because it lets the system (`adjustResize`) handle the keyboard. Do NOT use `"height"` there.
+- `behavior="height"` is the Android rule for keyboard-aware screens in this skill.
 - The footer `View` is NOT a `SafeAreaView edges={["bottom"]}`. The bottom inset is already applied by the parent `SafeAreaView`.
 - A fixed `paddingBottom` (about 8pt) guarantees minimum space between the button and the keyboard/edge without depending on safe-area insets.
 
@@ -102,7 +102,7 @@ Use this when the content is short and the button naturally belongs at the end.
 
 ```tsx
 <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
-  <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 24 }}
@@ -119,11 +119,9 @@ Use this when the content is short and the button naturally belongs at the end.
 
 Use this for chats (input + message list) or long lists with a fixed button.
 
-The default Android recommendation is still `behavior={undefined}` because Expo usually uses `softwareKeyboardLayoutMode: "resize"` and Android handles keyboard resizing natively.
-
 ```tsx
 <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
-  <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <FlatList
       data={items}
       keyExtractor={(item) => item.id}
@@ -138,19 +136,6 @@ The default Android recommendation is still `behavior={undefined}` because Expo 
   </KeyboardAvoidingView>
 </SafeAreaView>
 ```
-
-#### Android fallback for fixed footer/input
-
-For `FlatList` screens with a fixed footer or input, some Android devices or Expo edge-to-edge layouts may not resize the window enough, causing the keyboard to cover the footer/input. In this specific Pattern C case, test this fallback:
-
-```tsx
-<KeyboardAvoidingView
-  style={{ flex: 1 }}
-  behavior={Platform.OS === "ios" ? "padding" : "height"}
->
-```
-
-Only use this Android `"height"` fallback for Pattern C after verifying that `behavior={undefined}` causes the fixed footer/input to be covered. Do not make `"height"` the default Android behavior for all patterns.
 
 ### Pattern D — No KAV (No Inputs)
 
@@ -178,7 +163,7 @@ export const Screen = () => (
     <SafeAreaView style={styles.screen} edges={["left", "right", "bottom"]}>
       <CustomHeader title="Title" />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 16 }} keyboardShouldPersistTaps="handled">
           {/* content */}
         </ScrollView>
@@ -269,7 +254,7 @@ const styles = StyleSheet.create({
 
 Now the KAV measures its position starting right below the header because the header is part of the same tree, and the calculation is correct without an offset.
 
-**Alternative fix (worse, but valid):** `keyboardVerticalOffset={useHeaderHeight()}` from `@react-navigation/elements`. It is dynamic, not hardcoded, and compensates for the header. But it adds complexity and does NOT help much on Android because the conflict there is with `adjustResize`, not with the offset.
+**Alternative fix (worse, but valid):** `keyboardVerticalOffset={useHeaderHeight()}` from `@react-navigation/elements`. It is dynamic, not hardcoded, and compensates for the header. But it adds complexity; the preferred solution is still to render the header inside the screen tree.
 
 **NEVER do this:** `keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}`. It is a magic number that fails on other devices (large/small notch, large title, header with subtitle, tall status bar).
 
@@ -285,15 +270,13 @@ Now the KAV measures its position starting right below the header because the he
 
 ### Bug 3: "It works on iOS but breaks the button on Android"
 
-**Diagnosis:** you are using `behavior="height"` on Android as a default pattern.
+**Diagnosis:** Android keyboard-aware screens are not using `behavior="height"`.
 
 **Why it happens:**
-- Android has `softwareKeyboardLayoutMode: "resize"` (Expo default), so the system ALREADY resizes the window when the keyboard opens.
-- `behavior="height"` makes KAV ALSO reduce its height. Double calculation -> compressed content.
+- Some Android devices or Expo edge-to-edge layouts do not leave enough room for fixed footers or focused inputs when KAV is passive.
+- If Android behavior is omitted, fixed bottom actions or inputs can still be covered by the keyboard.
 
-**Fix:** `behavior={Platform.OS === "ios" ? "padding" : undefined}`. With `undefined`, KAV becomes a passive `<View>` on Android and lets the system handle everything.
-
-**Exception:** Pattern C (`FlatList` plus fixed footer/input) may use Android `"height"` as a verified fallback when `undefined` lets the keyboard cover the footer/input.
+**Fix:** use `behavior={Platform.OS === "ios" ? "padding" : "height"}` for keyboard-aware screens.
 
 ### Bug 4: "I cannot scroll inside the form"
 
@@ -376,7 +359,7 @@ return (
     )}
 
     {/* Global KAV, NEVER one per step */}
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Global ScrollView, NOT one per step */}
       <ScrollView
         style={{ flex: 1 }}
@@ -408,10 +391,10 @@ return (
 
 | iOS behavior | Android behavior |
 |--------------|------------------|
-| The system does NOT handle the keyboard natively. | `adjustResize` resizes the window when the keyboard opens. |
-| KAV with `behavior="padding"` adds bottom padding equal to keyboard height. | KAV with `behavior=undefined` does nothing and lets the system work. Pattern C may test `"height"` as a fallback for fixed footer/input overlap. |
+| The system does NOT handle the keyboard natively. | Android may resize the window, but keyboard-aware screens should still use KAV with `behavior="height"`. |
+| KAV with `behavior="padding"` adds bottom padding equal to keyboard height. | KAV with `behavior="height"` adjusts the available height when the keyboard opens. |
 | Bottom safe inset becomes 0 when the keyboard is open. | There is usually no bottom safe inset except the navigation bar. |
-| `useHeaderHeight()` reports the navigator header height. | Same, but less critical because `adjustResize` compensates more. |
+| `useHeaderHeight()` reports the navigator header height. | Same, but prefer internal custom headers over hardcoded offsets. |
 
 ### Required Android Config (app.config.js)
 
@@ -433,8 +416,8 @@ return (
 // ❌ SafeAreaView from react-native (deprecated, does not respect dynamic safe insets)
 import { SafeAreaView } from "react-native";
 
-// ❌ behavior="height" on Android as a universal default (conflicts with adjustResize)
-behavior={Platform.OS === "ios" ? "padding" : "height"}
+// ❌ passive Android behavior for a keyboard-aware screen
+behavior={Platform.OS === "ios" ? "padding" : undefined}
 
 // ❌ hardcoded keyboardVerticalOffset
 keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
@@ -478,8 +461,7 @@ keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
 
 - [ ] `SafeAreaView` comes from `react-native-safe-area-context`.
 - [ ] Hierarchy: `SafeAreaView > KAV > ScrollView/FlatList > content`.
-- [ ] Default behavior is `behavior={Platform.OS === "ios" ? "padding" : undefined}`.
-- [ ] Android `"height"` is only used as a tested Pattern C fallback for `FlatList` screens with fixed footer/input overlap.
+- [ ] Keyboard-aware screens use `behavior={Platform.OS === "ios" ? "padding" : "height"}`.
 - [ ] There is no `keyboardVerticalOffset` with a fixed numeric value.
 - [ ] If there is a header: use a custom header INSIDE the `SafeAreaView`, with `headerShown: false` on the navigator.
 - [ ] `ScrollView` has `style={{flex:1}}` + `contentContainerStyle={{flexGrow:1}}` + `keyboardShouldPersistTaps="handled"`.
