@@ -25,7 +25,7 @@ The most important rule: **the keyboard is not "fixed" with `keyboardVerticalOff
 5. **Do not use `keyboardVerticalOffset` with fixed values.** If you must keep the navigator header, use React Navigation's `useHeaderHeight()`. The preferred solution is rule 4.
 6. **Configure Android:** `softwareKeyboardLayoutMode: "resize"` in `app.config.js`. This is the Expo default.
 7. **`ScrollView`:** `style={{ flex: 1 }}` + `contentContainerStyle={{ flexGrow: 1 }}`. Do NOT use `flex: 1` inside `contentContainerStyle`. Always set `keyboardShouldPersistTaps="handled"`.
-8. **Do not wrap `ScrollView` with `Pressable onPress={Keyboard.dismiss}`** because it blocks scrolling. Use `keyboardDismissMode="on-drag"` on the `ScrollView`.
+8. **Do not wrap `ScrollView` with `Pressable onPress={Keyboard.dismiss}`** because it can block scrolling. If the product explicitly wants drag-to-dismiss behavior, add `keyboardDismissMode="on-drag"` to the `ScrollView`; otherwise omit it.
 9. **Do not nest `KeyboardAvoidingView`s.** Use one per screen, as high in the screen tree as possible.
 10. **Safe-area `edges`:** if the screen has an internal custom header that already handles `edges={["top"]}`, use `edges={["left","right","bottom"]}` on the parent to avoid duplicating the top inset.
 11. **`SafeAreaView` with `edges={["bottom"]}` + `paddingBottom` creates variable spacing when the keyboard opens** because the bottom inset becomes 0. For fixed padding, use a plain `View`.
@@ -69,7 +69,6 @@ export const FormScreen = () => (
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1, padding: 16 }}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         {/* inputs */}
@@ -130,7 +129,6 @@ Use this for chats (input + message list) or long lists with a fixed button.
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: 16 }}
       keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
     />
     <View style={styles.footer}>
       {/* fixed button or chat input */}
@@ -288,7 +286,8 @@ Now the KAV measures its position starting right below the header because the he
 
 **Fix:**
 1. Remove the `Pressable`/`TouchableWithoutFeedback`.
-2. Add `keyboardDismissMode="on-drag"` to the `ScrollView`. When the user swipes vertically, the keyboard dismisses automatically.
+2. Keep the `ScrollView` in charge of vertical gestures.
+3. Add `keyboardDismissMode="on-drag"` only if the intended UX is to dismiss the keyboard while scrolling.
 
 ### Bug 5: "Double top safe area — there is a gap at the top"
 
@@ -366,7 +365,6 @@ return (
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
       >
         {step === 0 && <Step1 />}
         {step === 1 && <Step2 />}
@@ -385,7 +383,7 @@ return (
 1. ONE KAV in the parent. Steps are plain `<View>` components.
 2. ONE `ScrollView` in the parent. Steps do not have their own scroll container.
 3. Use conditional rendering (`{step === N && <StepX />}`) to show the active step.
-4. Do NOT wrap steps with `<Pressable onPress={Keyboard.dismiss}>`. Use `keyboardDismissMode="on-drag"` on the `ScrollView`.
+4. Do NOT wrap steps with `<Pressable onPress={Keyboard.dismiss}>`. Add `keyboardDismissMode="on-drag"` only when drag-to-dismiss is desired.
 
 ---
 
